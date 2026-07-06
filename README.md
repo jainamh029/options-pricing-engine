@@ -139,15 +139,39 @@ kill the whole engine on any real chain. Fixed by moving staleness to
 the *snapshot* level (how old is this whole chain pull?) and keeping
 last-trade age as an informational field only, not a tradeability gate.
 
-### Put-call parity: expect real violations, not just chain-edge noise
+### Put-call parity: expect real violations, and know which of two causes is behind them
 
-For SPY (American-style options), the classic European parity identity
-`C - P = S·e^(-qT) - K·e^(-rT)` does **not** hold exactly — American
-puts carry an early-exercise premium that pushes their price above the
-European parity value, especially ITM. `validate_chain.py` surfaces this
-explicitly rather than treating every violation as noise or a solver bug
-(Stage 3's binomial tree is what actually prices that early-exercise
-value).
+The classic European parity identity `C - P = S·e^(-qT) - K·e^(-rT)` is
+checked against each strike's own **bid/ask band** — `[call_bid - put_ask,
+call_ask - put_bid]` — not a flat dollar tolerance against mid prices,
+since bid-ask spread noise alone (often $0.20-$0.50+ per leg) swamps a
+naive tolerance and flags nearly every strike regardless of real
+mispricing. Two genuinely different things can still cause a strike to be
+flagged, and it matters which:
+
+1. **American early-exercise premium.** SPY/AAPL options are
+   American-style, so an ITM American put is worth slightly more than its
+   European counterpart. Verified by pricing the same strike with this
+   repo's own binomial tree (`american=True` vs `american=False`) — for a
+   short-dated, low-dividend name this premium is on the order of **once
+   cent**, not enough to explain a large violation rate on its own.
+2. **Feed clock skew (the dominant one in practice).** yfinance's options
+   chain is documented as ~15min delayed on the free tier, while the spot
+   quote is close to real-time. On a trending session, the live spot used
+   in the parity check can be a dollar or more ahead of the spot the
+   options were actually quoted against — which shows up as a `diff`
+   that's roughly **constant across every strike's moneyness** (a level
+   shift), unlike early-exercise premium, which is ~zero for OTM/ATM and
+   only grows for deep ITM puts. Confirmed empirically: a live AAPL check
+   showed `diff` averaging -$1.21 with a standard deviation of only $0.22
+   across strikes from deep ITM to deep OTM — a level shift, not a
+   moneyness-dependent shape.
+
+`validate_chain.py` and `check_put_call_parity`'s docstring explain both.
+A more complete fix for #2 would back out an options-implied forward
+price from several liquid near-ATM strikes instead of using the live spot
+quote for this check specifically — not implemented, since it's a
+different mechanism, not a tolerance tweak.
 
 ## Stage 3: binomial tree, American exercise
 

@@ -73,8 +73,8 @@ def main():
     print(f"Price:  {result['price']:.4f}")
     print(f"Delta:  {result['delta']:.4f}")
     print(f"Gamma:  {result['gamma']:.6f}")
-    print(f"Vega:   {result['vega']:.4f}   (per 1.00 change in sigma)")
-    print(f"Theta:  {result['theta']:.4f}  (per year; {result['theta']/365:.4f} per day)")
+    print(f"Vega:   {result['vega']:.4f}   (per 1 percentage point change in sigma)")
+    print(f"Theta:  {result['theta']:.4f}  (per calendar day)")
     print(f"Rho:    {result['rho']:.4f}    (per 1.00 change in r)")
     print()
 

@@ -264,9 +264,10 @@
       const decimals = k === "gamma" ? 6 : 4;
       $(ids[i]).textContent = fmt(data[k], decimals);
     });
-    note.textContent = model === "binomial"
+    const methodNote = model === "binomial"
       ? "Finite-difference (bump-and-reprice) off the tree — theta is known to be noisier than BSM's closed form."
       : "Closed-form analytic derivatives.";
+    note.textContent = `${methodNote} Vega is per 1 percentage point of IV; theta is per calendar day.`;
   }
 
   // ---------------------------------------------------------------------

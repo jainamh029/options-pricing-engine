@@ -86,29 +86,62 @@ def annotate_chain(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def check_put_call_parity(calls: pd.DataFrame, puts: pd.DataFrame, S: float, r: float, q: float,
-                           T: float, tolerance: float = 0.10) -> pd.DataFrame:
+                           T: float, tolerance: float = 0.02) -> pd.DataFrame:
     """
     For each strike present in both (already-annotated) calls and puts,
     restricted to tradeable rows, verify:
 
         C - P ~= S*e^(-qT) - K*e^(-rT)
 
-    Real chains will show a handful of violations near the edges (deep
-    ITM/OTM, illiquid strikes) -- flagging them correctly is the point,
-    not a sign the solver is broken.
+    Checked against the ACHIEVABLE BAND implied by each leg's own bid/ask --
+    [call_bid - put_ask, call_ask - put_bid] -- rather than a flat absolute
+    tolerance around mid prices. A fixed tolerance like $0.10 flags nearly
+    every strike as a "violation" on real data, because bid-ask spread noise
+    alone (often $0.20-$0.50+ per leg on a single-digit-priced option) swamps
+    a dime -- that's quote noise, not mispricing. The band self-adjusts to
+    each strike's actual liquidity: a wide-spread illiquid strike gets a wide
+    allowed range, a tight-spread liquid one gets checked more sensitively.
+    `tolerance` is a small numerical slack added on top of the band for
+    rounding, not the primary check.
+
+    Even after that fix, a live, moving underlying can still show a majority
+    of strikes flagged -- verified (via cross-checking against this repo's
+    own binomial-tree American premium, and confirming `diff` is a roughly
+    CONSTANT offset across every moneyness rather than growing with it) to
+    be dominated by clock skew between the live spot feed and the options
+    chain, which yfinance's free tier documents as ~15min delayed: on a
+    trending session, `S` here can be a dollar or more ahead of the spot the
+    delayed chain was actually quoted against, which shows up as a level
+    shift in `diff` across the whole chain, not a moneyness-dependent one.
+    American early-exercise premium on ITM puts is real but, for short-dated
+    low-dividend names, an order of magnitude too small (~$0.01, confirmed
+    against binomial_price) to explain that shift. A more complete fix would
+    back out an options-implied forward from several liquid near-ATM
+    strikes instead of using the live spot quote here -- not implemented,
+    since it's a materially different mechanism, not a tolerance tweak.
     """
+    required = {"strike", "bid", "ask", "mid", "is_tradeable"}
     for name, df in (("calls", calls), ("puts", puts)):
-        if "mid" not in df.columns or "is_tradeable" not in df.columns:
-            raise ValueError(f"{name} dataframe must be annotate_chain()'d first (missing mid/is_tradeable)")
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"{name} dataframe must be annotate_chain()'d first (missing {missing})")
 
     merged = pd.merge(
-        calls[["strike", "mid", "is_tradeable"]].rename(columns={"mid": "call_mid", "is_tradeable": "call_tradeable"}),
-        puts[["strike", "mid", "is_tradeable"]].rename(columns={"mid": "put_mid", "is_tradeable": "put_tradeable"}),
+        calls[["strike", "bid", "ask", "mid", "is_tradeable"]].rename(
+            columns={"bid": "call_bid", "ask": "call_ask", "mid": "call_mid", "is_tradeable": "call_tradeable"}),
+        puts[["strike", "bid", "ask", "mid", "is_tradeable"]].rename(
+            columns={"bid": "put_bid", "ask": "put_ask", "mid": "put_mid", "is_tradeable": "put_tradeable"}),
         on="strike", how="inner",
     )
     merged = merged[merged["call_tradeable"] & merged["put_tradeable"]].copy()
+
     merged["lhs"] = merged["call_mid"] - merged["put_mid"]
     merged["rhs"] = S * math.exp(-q * T) - merged["strike"] * math.exp(-r * T)
     merged["diff"] = merged["lhs"] - merged["rhs"]
-    merged["violated"] = merged["diff"].abs() > tolerance
-    return merged[["strike", "call_mid", "put_mid", "lhs", "rhs", "diff", "violated"]].reset_index(drop=True)
+    merged["band_low"] = merged["call_bid"] - merged["put_ask"]
+    merged["band_high"] = merged["call_ask"] - merged["put_bid"]
+    merged["violated"] = (merged["rhs"] < merged["band_low"] - tolerance) | (merged["rhs"] > merged["band_high"] + tolerance)
+
+    return merged[
+        ["strike", "call_mid", "put_mid", "lhs", "rhs", "band_low", "band_high", "diff", "violated"]
+    ].reset_index(drop=True)

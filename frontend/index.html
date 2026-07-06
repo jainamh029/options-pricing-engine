@@ -131,11 +131,11 @@
           <span class="badge" id="greeksModelBadge">BSM</span>
         </div>
         <div class="greeks-grid" id="greeksGrid">
-          <div class="greek-tile"><span class="greek-label">Delta</span><span class="greek-val" id="gDelta">—</span></div>
-          <div class="greek-tile"><span class="greek-label">Gamma</span><span class="greek-val" id="gGamma">—</span></div>
-          <div class="greek-tile"><span class="greek-label">Vega</span><span class="greek-val" id="gVega">—</span></div>
-          <div class="greek-tile"><span class="greek-label">Theta</span><span class="greek-val" id="gTheta">—</span></div>
-          <div class="greek-tile"><span class="greek-label">Rho</span><span class="greek-val" id="gRho">—</span></div>
+          <div class="greek-tile" title="Price change per $1 move in the underlying"><span class="greek-label">Delta</span><span class="greek-val" id="gDelta">—</span></div>
+          <div class="greek-tile" title="Delta change per $1 move in the underlying"><span class="greek-label">Gamma</span><span class="greek-val" id="gGamma">—</span></div>
+          <div class="greek-tile" title="Price change per 1 percentage point move in IV (e.g. 20% -> 21%)"><span class="greek-label">Vega <small>/1% IV</small></span><span class="greek-val" id="gVega">—</span></div>
+          <div class="greek-tile" title="Price change per calendar day, holding everything else fixed"><span class="greek-label">Theta <small>/day</small></span><span class="greek-val" id="gTheta">—</span></div>
+          <div class="greek-tile" title="Price change per 1 percentage point move in the risk-free rate"><span class="greek-label">Rho</span><span class="greek-val" id="gRho">—</span></div>
         </div>
         <div class="greeks-note" id="greeksNote"></div>
       </div>

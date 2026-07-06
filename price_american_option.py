@@ -93,8 +93,8 @@ def main():
     print("--- American option Greeks (finite-difference off the tree) ---")
     print(f"Delta:  {greeks['delta']:.4f}")
     print(f"Gamma:  {greeks['gamma']:.6f}")
-    print(f"Vega:   {greeks['vega']:.4f}   (per 1.00 change in sigma)")
-    print(f"Theta:  {greeks['theta']:.4f}  (per year; {greeks['theta']/365:.4f} per day -- note: theta from a tree is known to be numerically noisier than BSM's closed form, see README)")
+    print(f"Vega:   {greeks['vega']:.4f}   (per 1 percentage point change in sigma)")
+    print(f"Theta:  {greeks['theta']:.4f}  (per calendar day -- note: theta from a tree is known to be numerically noisier than BSM's closed form, see README)")
     print(f"Rho:    {greeks['rho']:.4f}    (per 1.00 change in r)")
     print()
 

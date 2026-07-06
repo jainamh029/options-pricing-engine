@@ -66,13 +66,27 @@ def gamma(inp: OptionInputs) -> float:
 
 
 def vega(inp: OptionInputs) -> float:
-    """Same for calls and puts. Returned per 1.00 (100 percentage points) change in sigma."""
+    """
+    Same for calls and puts. Returned per 1 percentage point (0.01) change in
+    sigma -- the standard market convention (e.g. "vega of 0.15" means the
+    price moves $0.15 for each 1-point move in IV, like from 20% to 21%).
+    The raw calculus derivative dV/dsigma is per a full 1.0 (100 percentage
+    point) change in sigma, which is not a realistic move and not how vega
+    is quoted in practice, hence the /100.
+    """
     d1, _ = _d1_d2(inp)
-    return inp.S * math.exp(-inp.q * inp.T) * norm.pdf(d1) * math.sqrt(inp.T)
+    raw = inp.S * math.exp(-inp.q * inp.T) * norm.pdf(d1) * math.sqrt(inp.T)
+    return raw / 100.0
 
 
 def theta(inp: OptionInputs) -> float:
-    """Returned per year. Divide by 365 for per-calendar-day decay."""
+    """
+    Returned per calendar day. The raw calculus derivative -dV/dT is
+    naturally in per-YEAR units; dividing by 365 converts it to the
+    day-over-day dollar decay that's actually meaningful to look at (e.g.
+    "this option loses $0.29 of value per day"), since nobody reasons about
+    theta in per-year terms.
+    """
     S, K, T, r, q, sigma = inp.S, inp.K, inp.T, inp.r, inp.q, inp.sigma
     d1, d2 = _d1_d2(inp)
     term1 = -(S * math.exp(-q * T) * norm.pdf(d1) * sigma) / (2 * math.sqrt(T))
@@ -80,11 +94,13 @@ def theta(inp: OptionInputs) -> float:
     if inp.option_type == "call":
         term2 = -r * K * math.exp(-r * T) * norm.cdf(d2)
         term3 = q * S * math.exp(-q * T) * norm.cdf(d1)
-        return term1 + term2 + term3
+        annual_theta = term1 + term2 + term3
     else:
         term2 = r * K * math.exp(-r * T) * norm.cdf(-d2)
         term3 = -q * S * math.exp(-q * T) * norm.cdf(-d1)
-        return term1 + term2 + term3
+        annual_theta = term1 + term2 + term3
+
+    return annual_theta / 365.0
 
 
 def rho(inp: OptionInputs) -> float:
