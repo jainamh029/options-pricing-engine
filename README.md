@@ -2,6 +2,11 @@
 
 **Status: 4 pricing stages + FastAPI layer + frontend complete.** See build stages below.
 
+## Live site
+
+**Frontend:** https://jainamh029.github.io/options-pricing-engine/ (GitHub Pages, auto-deployed on every push to `frontend/`)
+**Backend:** deployed on Render's free tier via the `render.yaml` blueprint in this repo. Free tier sleeps after ~15min idle — the first request after that can take 30-50s to wake it up (the frontend's status pill says so explicitly rather than looking broken).
+
 ## Frontend
 
 A static, dependency-free dashboard (`frontend/`) — vanilla HTML/CSS/JS,
@@ -237,13 +242,30 @@ far, and bump-and-reprice MC Greeks are expensive (each Greek needs 2+
 full re-simulations) and noisy without careful common-random-numbers
 handling, which is out of scope here rather than glossed over.
 
+## Deployment
+
+- **Frontend**: `.github/workflows/deploy-pages.yml` publishes `frontend/`
+  to GitHub Pages on every push that touches it. Pages is configured for
+  Actions-based builds (not the legacy branch/folder method) specifically
+  because that method only supports serving from `/` or `/docs`, and the
+  frontend lives in `/frontend`.
+- **Backend**: `render.yaml` is a Render Blueprint — `pip install -r
+  requirements.txt` then `uvicorn backend.api.main:app --host 0.0.0.0
+  --port $PORT`, free plan, health check on `/`. One-time manual step
+  (Render requires connecting a repo via their dashboard; there's no
+  token-based CLI path for this): go to render.com → sign in with GitHub
+  → New → Blueprint → select this repo → Apply. Render then redeploys
+  automatically on every push to `main`, same as the frontend.
+- CORS on the API currently allows all origins (`allow_origins=["*"]`)
+  since the frontend's deployed origin wasn't known at the time the API
+  was written. Fine for a public read-only GET API; tighten to the
+  Pages origin specifically if this ever takes on state-changing endpoints.
+
 ## Planned (stretch, not built)
 
 - Heston / full stochastic-vol surface.
 - Historical backtesting view (realized vol vs. what the market implied
   looking back N days).
-- Deployment (Render/Railway for the API, Vercel/GitHub Pages for the
-  static frontend). Currently both run locally only.
 
 ## Assumptions / limitations (will grow each stage)
 

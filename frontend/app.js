@@ -3,8 +3,14 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // Local dev serves this file next to a locally-running API; a GitHub
+  // Pages deployment has no local API to talk to, so it defaults to the
+  // hosted Render backend instead. Either way, the gear icon overrides it.
+  const DEPLOYED_API_BASE = "https://options-pricing-engine-api.onrender.com";
+  const DEFAULT_API_BASE = location.hostname.endsWith("github.io") ? DEPLOYED_API_BASE : "http://127.0.0.1:8000";
+
   const state = {
-    apiBase: localStorage.getItem("opx_api_base") || "http://127.0.0.1:8000",
+    apiBase: localStorage.getItem("opx_api_base") || DEFAULT_API_BASE,
     side: "call",
   };
 
@@ -47,7 +53,8 @@
   }
 
   async function pingApi() {
-    setStatus("pending", "connecting…");
+    const isDeployedFree = state.apiBase === DEPLOYED_API_BASE;
+    setStatus("pending", isDeployedFree ? "waking up backend… (free tier, ~30-50s if idle)" : "connecting…");
     try {
       await fetchJSON("/", {});
       setStatus("ok", "connected");
