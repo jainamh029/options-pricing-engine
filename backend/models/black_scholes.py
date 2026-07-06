@@ -104,13 +104,21 @@ def theta(inp: OptionInputs) -> float:
 
 
 def rho(inp: OptionInputs) -> float:
-    """Returned per 1.00 (100 percentage points) change in r."""
+    """
+    Returned per 1 percentage point (0.01) change in the risk-free rate --
+    the standard market convention (e.g. "rho of 0.04" means the price
+    moves $0.04 for a 1-point move in r, like 3.85% -> 4.85%). The raw
+    calculus derivative dV/dr is per a full 1.0 (100 percentage point)
+    change in r, not a realistic move and not how rho is quoted, hence
+    the /100 -- same reasoning as vega's /100 above.
+    """
     K, T, r = inp.K, inp.T, inp.r
     _, d2 = _d1_d2(inp)
     if inp.option_type == "call":
-        return K * T * math.exp(-r * T) * norm.cdf(d2)
+        raw = K * T * math.exp(-r * T) * norm.cdf(d2)
     else:
-        return -K * T * math.exp(-r * T) * norm.cdf(-d2)
+        raw = -K * T * math.exp(-r * T) * norm.cdf(-d2)
+    return raw / 100.0
 
 
 def greeks(inp: OptionInputs) -> dict:

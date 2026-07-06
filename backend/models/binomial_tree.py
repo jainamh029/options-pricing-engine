@@ -65,10 +65,11 @@ def _bumped(inp: OptionInputs, **overrides) -> OptionInputs:
 def binomial_greeks(inp: OptionInputs, N: int = 200, american: bool = True) -> dict:
     """
     Bump-and-reprice Greeks off the binomial tree. See module docstring re:
-    theta noise. Vega and theta are rescaled to match black_scholes.py's
-    market-convention units (per 1 percentage point of sigma, per calendar
-    day) rather than the raw calculus derivative's per-unit-sigma/per-year
-    scale -- see the docstrings there for why.
+    theta noise. Vega, theta, and rho are rescaled to match
+    black_scholes.py's market-convention units (per 1 percentage point of
+    sigma, per calendar day, per 1 percentage point of r) rather than the
+    raw calculus derivative's per-unit-sigma/per-year/per-unit-r scale --
+    see the docstrings there for why.
     """
     h_S = inp.S * 0.01
     h_sigma = 0.01
@@ -82,11 +83,11 @@ def binomial_greeks(inp: OptionInputs, N: int = 200, american: bool = True) -> d
     delta = (px(S=inp.S + h_S) - px(S=inp.S - h_S)) / (2 * h_S)
     gamma = (px(S=inp.S + h_S) - 2 * base + px(S=inp.S - h_S)) / (h_S ** 2)
     vega_raw = (px(sigma=inp.sigma + h_sigma) - px(sigma=inp.sigma - h_sigma)) / (2 * h_sigma)
-    rho = (px(r=inp.r + h_r) - px(r=inp.r - h_r)) / (2 * h_r)
+    rho_raw = (px(r=inp.r + h_r) - px(r=inp.r - h_r)) / (2 * h_r)
     # -dV/dT, matching black_scholes.theta's (pre-rescale) convention
     theta_annual = (px(T=inp.T - h_T) - px(T=inp.T + h_T)) / (2 * h_T)
 
     return {
         "price": base, "delta": delta, "gamma": gamma,
-        "vega": vega_raw / 100.0, "theta": theta_annual / 365.0, "rho": rho,
+        "vega": vega_raw / 100.0, "theta": theta_annual / 365.0, "rho": rho_raw / 100.0,
     }

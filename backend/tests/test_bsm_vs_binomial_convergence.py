@@ -4,8 +4,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from backend.models.black_scholes import OptionInputs, price
-from backend.models.binomial_tree import binomial_price
+from backend.models.black_scholes import OptionInputs, price, greeks
+from backend.models.binomial_tree import binomial_price, binomial_greeks
 
 
 def test_binomial_converges_to_bsm_for_european_call():
@@ -58,3 +58,24 @@ def test_invalid_tree_probability_raises():
     inp = OptionInputs(S=100, K=100, T=1.0, r=5.0, q=0.0, sigma=0.01, option_type="call")
     with pytest.raises(ValueError):
         binomial_price(inp, N=10, american=False)
+
+
+def test_binomial_greeks_are_scaled_consistently_with_bsm():
+    """
+    Cross-model regression guard: binomial_greeks() rescales vega/theta/rho
+    to the same market-convention units as black_scholes.greeks() (see both
+    docstrings). For a European option the two models solve the same
+    problem, so their scaled Greeks should be close -- if one model's
+    scaling factor regresses (e.g. rho reverting to its raw, 100x-too-large
+    form) while the other stays correct, this catches the resulting
+    order-of-magnitude mismatch that a same-model-only test could miss.
+    """
+    inp = OptionInputs(S=100, K=105, T=0.5, r=0.03, q=0.01, sigma=0.25, option_type="call")
+    bsm = greeks(inp)
+    tree = binomial_greeks(inp, N=500, american=False)
+
+    assert math.isclose(tree["vega"], bsm["vega"], rel_tol=0.02)
+    assert math.isclose(tree["rho"], bsm["rho"], rel_tol=0.02)
+    # theta is the one Greek documented to be noisier off a tree (see
+    # binomial_tree.py's module docstring on "ringing") -- a looser bound.
+    assert math.isclose(tree["theta"], bsm["theta"], rel_tol=0.15)
