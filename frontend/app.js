@@ -40,9 +40,10 @@
     return res.json();
   }
 
-  function showBanner(msg) {
+  function showBanner(msg, kind = "error") {
     const el = $("errorBanner");
     el.textContent = msg;
+    el.classList.toggle("info", kind === "info");
     el.hidden = false;
   }
   function hideBanner() { $("errorBanner").hidden = true; }
@@ -286,6 +287,25 @@
       body.innerHTML = '<tr><td colspan="9" class="chain-empty">No strikes in range.</td></tr>';
       return;
     }
+
+    // yfinance's live bid/ask feed goes to $0.00 for every contract outside
+    // trading hours (nights, weekends, holidays) even though volume/OI still
+    // show real recent activity -- this is expected upstream behavior, not a
+    // bug in the validators flagging every row CROSSED. Say so explicitly
+    // instead of leaving an all-zero chain looking broken.
+    const allZeroQuotes = rows.every((r) => (r.bid || 0) === 0 && (r.ask || 0) === 0);
+    if (allZeroQuotes) {
+      showBanner(
+        "Market looks closed right now — yfinance is returning $0.00 bid/ask for every contract " +
+        "(normal outside 9:30am–4:00pm ET, or on a market holiday). The validators are correctly " +
+        "flagging these as CROSSED rather than pricing against a fake $0.00 quote. Prices above fall " +
+        "back to realized vol; try again during market hours for live implied vol and a populated smile.",
+        "info"
+      );
+    } else {
+      hideBanner();
+    }
+
     rows.forEach((r) => {
       const tr = document.createElement("tr");
       tr.className = r.cls + (r.is_crossed || r.is_illiquid ? " row-flagged" : "");

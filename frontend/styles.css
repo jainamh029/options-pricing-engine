@@ -171,6 +171,12 @@ body {
   font-family: var(--mono);
 }
 
+.banner.info {
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--accent);
+  color: var(--accent);
+}
+
 /* ---------- layout ---------- */
 
 .layout {
