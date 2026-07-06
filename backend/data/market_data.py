@@ -10,23 +10,64 @@ from datetime import datetime, timezone
 
 import yfinance as yf
 
-# Cache each chain fetch briefly so repeated calls (e.g. an API serving
-# several UI requests for the same expiry) don't hammer yfinance.
+# Every one of these caches exists for the same reason: yfinance sits on top
+# of Yahoo's undocumented, unofficial endpoints, which rate-limit aggressively
+# per-IP -- and a shared cloud IP (Render, Railway, etc.) can get throttled by
+# traffic from OTHER hosted apps, not just this one. Caching every live pull,
+# even briefly, is what keeps a single button click from firing 3-4 separate
+# Yahoo requests (spot, dividend, chain, realized vol) and meaningfully
+# reduces how often YFRateLimitError gets hit -- it doesn't eliminate it,
+# since it's an upstream limit outside this app's control.
 _CHAIN_CACHE_TTL_SECONDS = 45
 _chain_cache: dict[tuple[str, str], tuple] = {}  # (ticker, expiry) -> (calls, puts, fetched_at)
+
+_SPOT_DIV_CACHE_TTL_SECONDS = 30
+_spot_div_cache: dict[str, tuple[float, float, float]] = {}  # ticker -> (spot, div_yield, fetched_at)
+
+_EXPIRIES_CACHE_TTL_SECONDS = 300
+_expiries_cache: dict[str, tuple[list, float]] = {}  # ticker -> (expiries, fetched_at)
+
+_HISTORY_CACHE_TTL_SECONDS = 300
+_history_cache: dict[tuple[str, str], tuple] = {}  # (ticker, period) -> (closes, fetched_at)
 
 
 class MarketDataError(Exception):
     pass
 
 
-def get_spot_price(ticker: str) -> float:
-    """Latest available spot price for the underlying."""
+def _get_spot_and_dividend(ticker: str) -> tuple[float, float]:
+    """
+    Fetches spot price and dividend yield together and caches both, so a
+    single request doesn't fire two separate uncached Yahoo calls for the
+    same ticker (one via .history(), one via .info).
+    """
+    now = time.time()
+    cached = _spot_div_cache.get(ticker)
+    if cached is not None and (now - cached[2]) < _SPOT_DIV_CACHE_TTL_SECONDS:
+        return cached[0], cached[1]
+
     t = yf.Ticker(ticker)
     hist = t.history(period="1d")
     if hist.empty:
         raise MarketDataError(f"No price history returned for {ticker!r}")
-    return float(hist["Close"].iloc[-1])
+    spot = float(hist["Close"].iloc[-1])
+
+    info = t.info
+    trailing = info.get("trailingAnnualDividendYield")
+    if trailing is not None:
+        div_yield = float(trailing)
+    else:
+        div_yield_pct = info.get("dividendYield")
+        div_yield = 0.0 if div_yield_pct is None else float(div_yield_pct) / 100.0
+
+    _spot_div_cache[ticker] = (spot, div_yield, now)
+    return spot, div_yield
+
+
+def get_spot_price(ticker: str) -> float:
+    """Latest available spot price for the underlying."""
+    spot, _ = _get_spot_and_dividend(ticker)
+    return spot
 
 
 def get_dividend_yield(ticker: str) -> float:
@@ -40,26 +81,25 @@ def get_dividend_yield(ticker: str) -> float:
     field only if the fraction field is unavailable. Defaults to 0.0 for
     non-dividend payers.
     """
-    t = yf.Ticker(ticker)
-    info = t.info
-
-    trailing = info.get("trailingAnnualDividendYield")
-    if trailing is not None:
-        return float(trailing)
-
-    div_yield_pct = info.get("dividendYield")
-    if div_yield_pct is None:
-        return 0.0
-    return float(div_yield_pct) / 100.0
+    _, div_yield = _get_spot_and_dividend(ticker)
+    return div_yield
 
 
 def get_historical_prices(ticker: str, period: str = "1y"):
     """Daily close prices, used for realized volatility calculations."""
+    key = (ticker, period)
+    now = time.time()
+    cached = _history_cache.get(key)
+    if cached is not None and (now - cached[1]) < _HISTORY_CACHE_TTL_SECONDS:
+        return cached[0]
+
     t = yf.Ticker(ticker)
     hist = t.history(period=period)
     if hist.empty:
         raise MarketDataError(f"No historical data returned for {ticker!r}")
-    return hist["Close"]
+    closes = hist["Close"]
+    _history_cache[key] = (closes, now)
+    return closes
 
 
 def get_realized_volatility(ticker: str, period: str = "1y", trading_days: int = 252) -> float:
@@ -73,11 +113,18 @@ def get_realized_volatility(ticker: str, period: str = "1y", trading_days: int =
 
 
 def get_option_expiries(ticker: str) -> list[str]:
+    now = time.time()
+    cached = _expiries_cache.get(ticker)
+    if cached is not None and (now - cached[1]) < _EXPIRIES_CACHE_TTL_SECONDS:
+        return cached[0]
+
     t = yf.Ticker(ticker)
     expiries = t.options
     if not expiries:
         raise MarketDataError(f"No option expiries available for {ticker!r}")
-    return list(expiries)
+    expiries = list(expiries)
+    _expiries_cache[ticker] = (expiries, now)
+    return expiries
 
 
 def years_to_expiry(expiry_str: str) -> float:

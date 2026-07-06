@@ -22,6 +22,7 @@ from typing import Literal, Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from yfinance.exceptions import YFRateLimitError, YFException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -234,7 +235,17 @@ def _chain_row(row) -> ChainRow:
 
 
 def _as_http_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, (MarketDataError, RiskFreeRateError)):
+    if isinstance(exc, YFRateLimitError):
+        return HTTPException(
+            status_code=503,
+            detail=(
+                "Yahoo Finance is rate-limiting requests from this server right now. This is a known "
+                "limitation of free yfinance data on shared cloud IPs (Yahoo throttles per-IP, and this "
+                "server's IP is shared across many hosted apps) -- not a bug in the pricing logic. "
+                "Wait a minute and try again."
+            ),
+        )
+    if isinstance(exc, (MarketDataError, RiskFreeRateError, YFException)):
         return HTTPException(status_code=502, detail=str(exc))
     if isinstance(exc, ValueError):
         return HTTPException(status_code=400, detail=str(exc))
