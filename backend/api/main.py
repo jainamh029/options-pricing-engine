@@ -15,6 +15,7 @@ Endpoints:
 """
 
 import math
+import re
 import sys
 import os
 from typing import Literal, Optional
@@ -175,6 +176,7 @@ def _solve_iv_column(df, S, T, r, q, option_type):
 
 def _resolve_live_inputs(ticker: str, option_type: str, expiry_override: Optional[str],
                           strike_override: Optional[float], vol_source: str) -> dict:
+    ticker = _validate_ticker(ticker)
     expiry = market_data.pick_default_expiry(ticker, min_days=7, expiry_override=expiry_override)
     T = market_data.years_to_expiry(expiry)
     spot = market_data.get_spot_price(ticker)
@@ -234,6 +236,30 @@ def _chain_row(row) -> ChainRow:
     )
 
 
+_TICKER_RE = re.compile(r"^[A-Za-z0-9.\-\^=]{1,15}$")
+
+
+def _validate_ticker(ticker: str) -> str:
+    """
+    Rejects obviously-invalid input before it ever reaches yfinance. Without
+    this, a ticker with special characters (path separators, quotes, script
+    tags, etc.) can break Yahoo's own request encoding inside yfinance,
+    which then raises a raw, confusing json.JSONDecodeError ("Expecting
+    value: line 1 column 1") instead of a clear "ticker not found" message.
+    This isn't a security boundary (there's no filesystem or SQL access
+    anywhere in this app for such input to exploit) -- it's purely about
+    giving a clean 400 instead of leaking an internal parser error.
+    """
+    ticker = ticker.strip()
+    if not ticker:
+        raise ValueError("Ticker cannot be empty")
+    if not _TICKER_RE.match(ticker):
+        raise ValueError(
+            f"{ticker!r} doesn't look like a valid ticker symbol (letters, digits, '.', '-', '^', '=' only)"
+        )
+    return ticker
+
+
 def _as_http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, YFRateLimitError):
         return HTTPException(
@@ -266,6 +292,7 @@ def index():
 @app.get("/expiries")
 def get_expiries(ticker: str):
     try:
+        ticker = _validate_ticker(ticker)
         return {"ticker": ticker.upper(), "expiries": market_data.get_option_expiries(ticker)}
     except Exception as exc:
         raise _as_http_error(exc)
@@ -378,6 +405,7 @@ def get_chain(
     range_pct: float = Query(0.30, ge=0.01, le=2.0, description="Keep strikes within +/- this fraction of spot"),
 ):
     try:
+        ticker = _validate_ticker(ticker)
         expiry_resolved = market_data.pick_default_expiry(ticker, min_days=7, expiry_override=expiry)
         T = market_data.years_to_expiry(expiry_resolved)
         spot = market_data.get_spot_price(ticker)
@@ -410,6 +438,7 @@ def get_chain(
 @app.get("/iv-smile", response_model=IVSmileResponse)
 def get_iv_smile(ticker: str, expiry: Optional[str] = None, range_pct: float = Query(0.30, ge=0.01, le=2.0)):
     try:
+        ticker = _validate_ticker(ticker)
         expiry_resolved = market_data.pick_default_expiry(ticker, min_days=7, expiry_override=expiry)
         T = market_data.years_to_expiry(expiry_resolved)
         spot = market_data.get_spot_price(ticker)

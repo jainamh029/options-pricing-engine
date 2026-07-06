@@ -11,6 +11,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -118,3 +119,22 @@ def test_iv_smile(monkeypatch):
 def test_invalid_model_returns_422():
     resp = client.get("/price", params={"ticker": "TEST", "model": "heston"})
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("bad_ticker", [
+    "../../etc/passwd",
+    "<script>alert(1)</script>",
+    "AAPL; DROP TABLE",
+    "   ",
+    "",
+])
+def test_malformed_ticker_returns_clean_400_not_raw_parser_error(bad_ticker):
+    """
+    Special characters in a ticker can break Yahoo's own request encoding
+    inside yfinance, which then raises a raw json.JSONDecodeError instead of
+    a clear message. Input validation should catch this before it ever
+    reaches yfinance.
+    """
+    resp = client.get("/price", params={"ticker": bad_ticker})
+    assert resp.status_code == 400
+    assert "Expecting value" not in resp.json()["detail"]

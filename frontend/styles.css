@@ -499,3 +499,10 @@ body {
   .field-submit { margin-left: 0; }
   .footer { flex-direction: column; }
 }
+
+@media (max-width: 520px) {
+  .topbar { flex-wrap: wrap; row-gap: 8px; }
+  .topbar-left { flex-basis: 100%; }
+  .data-note { display: none; }
+  .greeks-grid { grid-template-columns: repeat(2, 1fr); }
+}

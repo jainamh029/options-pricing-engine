@@ -33,11 +33,30 @@
       let detail = res.statusText;
       try {
         const body = await res.json();
-        detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+        detail = formatErrorDetail(body.detail);
       } catch (_) {}
       throw new Error(detail);
     }
     return res.json();
+  }
+
+  // FastAPI's own request-validation failures (missing/malformed query
+  // params) return `detail` as a LIST of {loc, msg} objects, not a string --
+  // different shape from this app's own HTTPException messages (always a
+  // plain string). Without unwrapping it, a validation failure (e.g.
+  // submitting with an empty ticker) shows the user a raw JSON blob like
+  // `[{"type":"missing","loc":["query","ticker"],"msg":"Field required"}]`.
+  function formatErrorDetail(detail) {
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((e) => {
+          const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : "input";
+          return `${field}: ${e.msg || "invalid value"}`;
+        })
+        .join("; ");
+    }
+    return detail == null ? "Unknown error" : JSON.stringify(detail);
   }
 
   function showBanner(msg, kind = "error") {
@@ -172,12 +191,18 @@
   // ---------------------------------------------------------------------
 
   async function handleSubmit() {
+    const ticker = $("tickerInput").value.trim().toUpperCase();
+    if (!ticker) {
+      showBanner("Enter a ticker symbol first.", "info");
+      $("tickerInput").focus();
+      return;
+    }
+
     const btn = $("priceBtn");
     btn.disabled = true;
     btn.textContent = "PRICING…";
     hideBanner();
 
-    const ticker = $("tickerInput").value.trim().toUpperCase();
     const expiry = $("expirySelect").value;
     const strike = $("strikeInput").value;
     const model = $("modelSelect").value;
