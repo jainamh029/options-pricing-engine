@@ -1,6 +1,30 @@
 # Real-Time Options Pricing Engine
 
-**Status: 4 pricing stages + FastAPI layer complete.** See build stages below.
+**Status: 4 pricing stages + FastAPI layer + frontend complete.** See build stages below.
+
+## Frontend
+
+A static, dependency-free dashboard (`frontend/`) — vanilla HTML/CSS/JS,
+no build step, no chart library (the IV smile is a hand-built SVG chart
+with a live crosshair/tooltip). Styled as a dark trading-terminal UI
+(monospace figures, amber/green/red — the palette real options
+platforms use) rather than a generic dashboard theme.
+
+```bash
+# terminal 1 — backend
+source venv/bin/activate
+uvicorn backend.api.main:app --reload
+
+# terminal 2 — frontend (any static server works)
+cd frontend && python3 -m http.server 8812
+# open http://127.0.0.1:8812
+```
+
+Enter a ticker, pick a model (BSM / Binomial / Monte Carlo), hit PRICE IT.
+The API base URL is configurable from the gear icon in the top bar (for
+pointing the frontend at a deployed backend instead of localhost).
+
+![Frontend dashboard](docs/frontend.png)
 
 ## Live API
 
@@ -218,8 +242,8 @@ handling, which is out of scope here rather than glossed over.
 - Heston / full stochastic-vol surface.
 - Historical backtesting view (realized vol vs. what the market implied
   looking back N days).
-- Frontend. The API above is what a frontend would call — it hasn't
-  been built yet.
+- Deployment (Render/Railway for the API, Vercel/GitHub Pages for the
+  static frontend). Currently both run locally only.
 
 ## Assumptions / limitations (will grow each stage)
 

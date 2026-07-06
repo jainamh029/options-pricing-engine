@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OPX — Real-Time Options Pricing Engine</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-palette="#1fa971,#e5484d">
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">OPX</span>
+      <span class="logo-sub">OPTIONS PRICING ENGINE</span>
+    </div>
+    <div class="topbar-right">
+      <span class="data-note">yfinance · ~15min delayed &nbsp;|&nbsp; FRED DGS3MO</span>
+      <button class="api-config-btn" id="apiConfigBtn" title="Configure API base URL">⚙</button>
+      <span class="status-pill" id="statusPill"><span class="dot" id="statusDot"></span><span id="statusText">connecting…</span></span>
+    </div>
+  </header>
+
+  <div class="api-config-panel" id="apiConfigPanel" hidden>
+    <label for="apiBaseInput">API base URL</label>
+    <input type="text" id="apiBaseInput" spellcheck="false" placeholder="http://127.0.0.1:8000">
+    <button id="apiBaseSave" class="btn-ghost">Save &amp; reconnect</button>
+    <span class="api-config-hint">Run <code>uvicorn backend.api.main:app --reload</code> from the project root, then point this at it.</span>
+  </div>
+
+  <div class="banner" id="errorBanner" hidden></div>
+
+  <main class="layout">
+
+    <!-- Control strip -->
+    <section class="control-strip" aria-label="Query controls">
+      <div class="field">
+        <label for="tickerInput">Ticker</label>
+        <input type="text" id="tickerInput" value="AAPL" maxlength="8" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label for="expirySelect">Expiry</label>
+        <select id="expirySelect"><option>—</option></select>
+      </div>
+
+      <div class="field">
+        <label>Side</label>
+        <div class="toggle-pair" id="sideToggle">
+          <button type="button" class="pill pill-call active" data-value="call">CALL</button>
+          <button type="button" class="pill pill-put" data-value="put">PUT</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="strikeInput">Strike</label>
+        <input type="number" id="strikeInput" placeholder="auto (ATM)" step="0.5">
+      </div>
+
+      <div class="field">
+        <label for="modelSelect">Model</label>
+        <select id="modelSelect">
+          <option value="bsm">Black-Scholes-Merton</option>
+          <option value="binomial">Binomial (American)</option>
+          <option value="monte_carlo">Monte Carlo</option>
+        </select>
+      </div>
+
+      <div class="field" id="mcVariantField" hidden>
+        <label for="mcVariantSelect">MC payoff</label>
+        <select id="mcVariantSelect">
+          <option value="vanilla">Vanilla</option>
+          <option value="asian">Asian (avg)</option>
+          <option value="barrier">Barrier</option>
+        </select>
+      </div>
+
+      <div class="field" id="barrierLevelField" hidden>
+        <label for="barrierLevelInput">Barrier</label>
+        <input type="number" id="barrierLevelInput" placeholder="e.g. 350" step="0.5">
+      </div>
+
+      <div class="field" id="barrierTypeField" hidden>
+        <label for="barrierTypeSelect">Barrier type</label>
+        <select id="barrierTypeSelect">
+          <option value="up-and-out">up-and-out</option>
+          <option value="down-and-out">down-and-out</option>
+          <option value="up-and-in">up-and-in</option>
+          <option value="down-and-in">down-and-in</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="volSourceSelect">Vol source</label>
+        <select id="volSourceSelect">
+          <option value="auto">Auto (implied→realized)</option>
+          <option value="implied">Implied only</option>
+          <option value="realized">Realized only</option>
+        </select>
+      </div>
+
+      <div class="field field-submit">
+        <label>&nbsp;</label>
+        <button id="priceBtn" class="btn-primary">PRICE IT</button>
+      </div>
+    </section>
+
+    <!-- Price + Greeks row -->
+    <section class="grid-top">
+
+      <div class="panel price-panel">
+        <div class="panel-head">
+          <span>MODEL PRICE</span>
+          <span class="badge" id="modelBadge">BSM</span>
+        </div>
+        <div class="price-hero" id="priceHero">—</div>
+        <div class="price-sub" id="sigmaLine">σ — · —</div>
+
+        <div class="market-compare" id="marketCompare">
+          <div class="mc-item"><span class="mc-label">BID</span><span class="mc-val" id="mktBid">—</span></div>
+          <div class="mc-item"><span class="mc-label">ASK</span><span class="mc-val" id="mktAsk">—</span></div>
+          <div class="mc-item"><span class="mc-label">MID</span><span class="mc-val" id="mktMid">—</span></div>
+          <div class="mc-item"><span class="mc-label">MODEL − MID</span><span class="mc-val" id="mktDiff">—</span></div>
+        </div>
+
+        <ul class="notes" id="priceNotes"></ul>
+      </div>
+
+      <div class="panel greeks-panel">
+        <div class="panel-head">
+          <span>GREEKS</span>
+          <span class="badge" id="greeksModelBadge">BSM</span>
+        </div>
+        <div class="greeks-grid" id="greeksGrid">
+          <div class="greek-tile"><span class="greek-label">Delta</span><span class="greek-val" id="gDelta">—</span></div>
+          <div class="greek-tile"><span class="greek-label">Gamma</span><span class="greek-val" id="gGamma">—</span></div>
+          <div class="greek-tile"><span class="greek-label">Vega</span><span class="greek-val" id="gVega">—</span></div>
+          <div class="greek-tile"><span class="greek-label">Theta</span><span class="greek-val" id="gTheta">—</span></div>
+          <div class="greek-tile"><span class="greek-label">Rho</span><span class="greek-val" id="gRho">—</span></div>
+        </div>
+        <div class="greeks-note" id="greeksNote"></div>
+      </div>
+
+    </section>
+
+    <!-- IV Smile chart -->
+    <section class="panel chart-panel">
+      <div class="panel-head">
+        <span>IMPLIED VOLATILITY SMILE</span>
+        <span class="chart-subhead" id="smileMeta">—</span>
+      </div>
+      <div class="legend-row">
+        <span class="legend-item"><span class="swatch swatch-call"></span>Call IV</span>
+        <span class="legend-item"><span class="swatch swatch-put"></span>Put IV</span>
+        <span class="legend-item legend-atm"><span class="swatch swatch-atm"></span>ATM IV <b id="atmIvValue">—</b></span>
+      </div>
+      <div class="chart-wrap" id="chartWrap">
+        <svg id="smileSvg" viewBox="0 0 900 340" preserveAspectRatio="none"></svg>
+        <div class="chart-tooltip" id="chartTooltip" hidden></div>
+      </div>
+      <div class="chart-empty" id="chartEmpty">No data yet — enter a ticker and hit PRICE IT.</div>
+    </section>
+
+    <!-- Chain table -->
+    <section class="panel chain-panel">
+      <div class="panel-head">
+        <span>LIVE CHAIN</span>
+        <span class="chart-subhead" id="parityMeta">—</span>
+      </div>
+      <div class="chain-scroll">
+        <table class="chain-table">
+          <thead>
+            <tr>
+              <th class="col-side">SIDE</th><th>STRIKE</th><th>BID</th><th>ASK</th><th>MID</th>
+              <th>VOL</th><th>OI</th><th>IV</th><th>FLAGS</th>
+            </tr>
+          </thead>
+          <tbody id="chainBody">
+            <tr><td colspan="9" class="chain-empty">No data yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>Prices &amp; Greeks computed on-demand from live inputs — never cached theoretical values. Not investment advice.</span>
+    <a href="https://github.com/jainamh029/options-pricing-engine" target="_blank" rel="noopener">github.com/jainamh029/options-pricing-engine</a>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
